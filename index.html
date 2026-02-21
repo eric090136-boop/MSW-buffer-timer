@@ -18,7 +18,6 @@
         .btn-start { background: var(--primary); color: white; width: 100%; padding: 10px; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; }
         .btn-stop { background: #ed4245; color: white; width: 100%; padding: 10px; border: none; border-radius: 3px; cursor: pointer; display: none; }
         .delete-btn { position: absolute; top: 10px; right: 10px; background: none; color: #b9bbbe; border: none; cursor: pointer; font-size: 18px; }
-        .loop-tag { font-size: 0.8rem; background: #4f545c; padding: 2px 8px; border-radius: 10px; margin-left: 10px; }
     </style>
 </head>
 <body>
@@ -34,7 +33,6 @@
     const container = document.getElementById('timers-container');
     const timerStates = {};
 
-    // 強制請求通知權限
     async function requestPermission() {
         if (Notification.permission !== 'granted') {
             await Notification.requestPermission();
@@ -59,8 +57,9 @@
             <div class="time-display">00:00</div>
             <button class="btn-start" onclick="startTimer('${id}')">開始任務</button>
             <button class="btn-stop" onclick="stopTimer('${id}')">停止任務</button>
+            
             <input type="file" id="input-${id}" class="audio-in" style="display:none" onchange="updateAudio(event, '${id}')">
-            <p onclick="document.getElementById('input-${id}').click()" style="font-size:0.7rem; color:#72767d; cursor:pointer; margin-top:10px; text-decoration:underline">🎵 自訂音效 (選填)</p>
+            <p onclick="document.getElementById('input-${id}').click()" style="font-size:0.7rem; color:#72767d; cursor:pointer; margin-top:10px; text-decoration:underline">🎵 更換自訂音效 (選填)</p>
         `;
         container.appendChild(card);
         timerStates[id] = { 
@@ -113,23 +112,21 @@
         const name = card.querySelector('.timer-name').value;
         const isLoop = card.querySelector('.l').checked;
         
-        // 關鍵修改：先停止計時並播放聲音，再跳通知
         stopTimer(id);
         timerStates[id].audio.play().catch(e => console.log("音訊播放受阻"));
 
-        // 發送 Windows 原生通知
         if (Notification.permission === 'granted') {
             const notif = new Notification("計時結束", {
                 body: `【${name}】的時間到了！${isLoop ? '即將自動開始下一輪。' : ''}`,
                 icon: "https://cdn-icons-png.flaticon.com/512/3602/3602145.png",
-                tag: id, // 防止多個計時器通知重疊
+                tag: id,
                 requireInteraction: false
             });
             notif.onclick = () => { window.focus(); notif.close(); };
         }
 
         if (isLoop) {
-            setTimeout(() => startTimer(id), 1000); // 延遲1秒後重啟
+            setTimeout(() => startTimer(id), 1000);
         }
     }
 
@@ -143,43 +140,37 @@
         resetDisplay(id);
     }
 
-    function updateAudio(e, id) {
-        const file = e.target.files[0];
-        if (file) timerStates[id].audio = new Audio(URL.createObjectURL(file));
-    }
-
     function removeTimer(id) {
         stopTimer(id);
         document.getElementById(id).remove();
         delete timerStates[id];
     }
 
-    addTimer(); // 預設新增一個
-    }
-
+    // 整合並修復的音效處理邏輯
     function updateAudio(e, id) {
-    const file = e.target.files[0];
-    if (file) {
-        const url = URL.createObjectURL(file);
-        // 更新該計時器的專屬音效
-        timerStates[id].audio = new Audio(url);
-        
-        // 專業回饋：讓使用者知道上傳成功
-        const card = document.getElementById(id);
-        const label = card.querySelector('p');
-        label.innerText = `✅ 已載入：${file.name}`;
-        label.style.color = "#3ba55e";
+        const file = e.target.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            timerStates[id].audio = new Audio(url);
+            
+            // UI 回饋
+            const card = document.getElementById(id);
+            const label = card.querySelector('p');
+            label.innerText = `✅ 已載入：${file.name}`;
+            label.style.color = "#3ba55e";
 
-        // 預覽播放 1 秒
-        timerStates[id].audio.play();
-        setTimeout(() => {
-            timerStates[id].audio.pause();
-            timerStates[id].audio.currentTime = 0;
-        }, 1500);
-        
-        console.log(`[Timer ${id}] 音效更新成功: ${file.name}`);
+            // 預覽音效
+            timerStates[id].audio.play();
+            setTimeout(() => {
+                timerStates[id].audio.pause();
+                timerStates[id].audio.currentTime = 0;
+            }, 1500);
+            
+            console.log(`[Timer ${id}] 音效更新成功: ${file.name}`);
+        }
     }
-}
+
+    addTimer(); // 預設新增一個
 </script>
 </body>
 </html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>專業多工計時系統 Pro</title>
+    <style>
+        :root { --primary: #5865F2; --bg: #36393f; --card: #2f3136; --text: #ffffff; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 1000px; margin: 0 auto 30px; }
+        .add-btn { background: #3ba55e; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #timers-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .timer-card { background: var(--card); padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); position: relative; border-left: 5px solid #202225; }
+        .timer-card.running { border-left-color: var(--primary); }
+        .timer-name { background: transparent; color: white; border: none; font-size: 1.3rem; font-weight: bold; width: 80%; border-bottom: 1px solid #4f545c; margin-bottom: 15px; outline: none; }
+        .time-display { font-size: 3rem; font-weight: bold; color: #ffffff; margin: 10px 0; font-family: monospace; }
+        .input-group { margin: 15px 0; color: #b9bbbe; }
+        .input-group input { background: #202225; color: white; border: 1px solid #202225; padding: 5px; width: 50px; border-radius: 3px; text-align: center; }
+        .btn-start { background: var(--primary); color: white; width: 100%; padding: 10px; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; }
+        .btn-stop { background: #ed4245; color: white; width: 100%; padding: 10px; border: none; border-radius: 3px; cursor: pointer; display: none; }
+        .delete-btn { position: absolute; top: 10px; right: 10px; background: none; color: #b9bbbe; border: none; cursor: pointer; font-size: 18px; }
+        .loop-tag { font-size: 0.8rem; background: #4f545c; padding: 2px 8px; border-radius: 10px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🔔 任務計時管理器</h1>
+    <button class="add-btn" onclick="addTimer()">＋ 新增計時器</button>
+</div>
+
+<div id="timers-container"></div>
+
+<script>
+    const container = document.getElementById('timers-container');
+    const timerStates = {};
+
+    // 強制請求通知權限
+    async function requestPermission() {
+        if (Notification.permission !== 'granted') {
+            await Notification.requestPermission();
+        }
+    }
+
+    function addTimer() {
+        const id = `t-${Date.now()}`;
+        const card = document.createElement('div');
+        card.className = 'timer-card';
+        card.id = id;
+        card.innerHTML = `
+            <button class="delete-btn" onclick="removeTimer('${id}')">✕</button>
+            <input type="text" class="timer-name" value="任務 ${Object.keys(timerStates).length + 1}">
+            <div class="input-group">
+                <input type="number" class="m" value="0"> 分 
+                <input type="number" class="s" value="10"> 秒
+                <label style="margin-left:15px; cursor:pointer">
+                    <input type="checkbox" class="l"> 自動循環
+                </label>
+            </div>
+            <div class="time-display">00:00</div>
+            <button class="btn-start" onclick="startTimer('${id}')">開始任務</button>
+            <button class="btn-stop" onclick="stopTimer('${id}')">停止任務</button>
+            <input type="file" class="audio-in" style="display:none" onchange="updateAudio(event, '${id}')">
+            <p onclick="this.nextElementSibling.click()" style="font-size:0.7rem; color:#72767d; cursor:pointer; margin-top:10px; text-decoration:underline">🎵 自訂音效 (選填)</p>
+        `;
+        container.appendChild(card);
+        timerStates[id] = { 
+            interval: null, 
+            audio: new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3') 
+        };
+        resetDisplay(id);
+    }
+
+    function resetDisplay(id) {
+        const card = document.getElementById(id);
+        const m = card.querySelector('.m').value;
+        const s = card.querySelector('.s').value;
+        card.querySelector('.time-display').innerText = 
+            `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    function startTimer(id) {
+        requestPermission();
+        const card = document.getElementById(id);
+        const m = parseInt(card.querySelector('.m').value) || 0;
+        const s = parseInt(card.querySelector('.s').value) || 0;
+        const duration = (m * 60 + s) * 1000;
+        if (duration <= 0) return;
+
+        card.classList.add('running');
+        card.querySelector('.btn-start').style.display = 'none';
+        card.querySelector('.btn-stop').style.display = 'block';
+
+        const targetTime = Date.now() + duration;
+        timerStates[id].interval = setInterval(() => {
+            const remain = targetTime - Date.now();
+            if (remain <= 0) {
+                handleFinish(id);
+            } else {
+                updateCardDisplay(id, remain);
+            }
+        }, 100);
+    }
+
+    function updateCardDisplay(id, ms) {
+        const total = Math.ceil(ms / 1000);
+        const m = Math.floor(total / 60).toString().padStart(2,'0');
+        const s = (total % 60).toString().padStart(2,'0');
+        document.getElementById(id).querySelector('.time-display').innerText = `${m}:${s}`;
+    }
+
+    function handleFinish(id) {
+        const card = document.getElementById(id);
+        const name = card.querySelector('.timer-name').value;
+        const isLoop = card.querySelector('.l').checked;
+        
+        // 關鍵修改：先停止計時並播放聲音，再跳通知
+        stopTimer(id);
+        timerStates[id].audio.play().catch(e => console.log("音訊播放受阻"));
+
+        // 發送 Windows 原生通知
+        if (Notification.permission === 'granted') {
+            const notif = new Notification("計時結束", {
+                body: `【${name}】的時間到了！${isLoop ? '即將自動開始下一輪。' : ''}`,
+                icon: "https://cdn-icons-png.flaticon.com/512/3602/3602145.png",
+                tag: id, // 防止多個計時器通知重疊
+                requireInteraction: false
+            });
+            notif.onclick = () => { window.focus(); notif.close(); };
+        }
+
+        if (isLoop) {
+            setTimeout(() => startTimer(id), 1000); // 延遲1秒後重啟
+        }
+    }
+
+    function stopTimer(id) {
+        const card = document.getElementById(id);
+        clearInterval(timerStates[id].interval);
+        timerStates[id].interval = null;
+        card.classList.remove('running');
+        card.querySelector('.btn-start').style.display = 'block';
+        card.querySelector('.btn-stop').style.display = 'none';
+        resetDisplay(id);
+    }
+
+    function updateAudio(e, id) {
+        const file = e.target.files[0];
+        if (file) timerStates[id].audio = new Audio(URL.createObjectURL(file));
+    }
+
+    function removeTimer(id) {
+        stopTimer(id);
+        document.getElementById(id).remove();
+        delete timerStates[id];
+    }
+
+    addTimer(); // 預設新增一個
+</script>
+</body>
+</html>

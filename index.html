@@ -59,8 +59,8 @@
             <div class="time-display">00:00</div>
             <button class="btn-start" onclick="startTimer('${id}')">開始任務</button>
             <button class="btn-stop" onclick="stopTimer('${id}')">停止任務</button>
-            <input type="file" class="audio-in" style="display:none" onchange="updateAudio(event, '${id}')">
-            <p onclick="this.nextElementSibling.click()" style="font-size:0.7rem; color:#72767d; cursor:pointer; margin-top:10px; text-decoration:underline">🎵 自訂音效 (選填)</p>
+            <input type="file" id="input-${id}" class="audio-in" style="display:none" onchange="updateAudio(event, '${id}')">
+            <p onclick="document.getElementById('input-${id}').click()" style="font-size:0.7rem; color:#72767d; cursor:pointer; margin-top:10px; text-decoration:underline">🎵 自訂音效 (選填)</p>
         `;
         container.appendChild(card);
         timerStates[id] = { 
